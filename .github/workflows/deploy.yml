@@ -26,8 +26,6 @@ jobs:
         uses: actions/checkout@v6
       - name: Configure Pages
         uses: actions/configure-pages@v5
-      - name: Cache selected Wikimedia SVGs inside deployed site
-        run: python3 tools/vendor_signs.py
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
