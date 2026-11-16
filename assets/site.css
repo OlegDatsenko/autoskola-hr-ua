@@ -6,3 +6,7 @@
 @media(prefers-color-scheme:dark){:root{--page:#101724;--paper:#1c2636;--ink:#e9eff9;--muted:#a5b2c6;--line:#344258;--accent:#9dbbff;--accent-soft:#263a5d;--ink-dark:#354c73;--subtle:#222f40;--shadow:none}.sitehead,.appbottom{background:rgba(25,34,49,.97)}.stat{background:#293a52;color:#c0cce0}.chip{color:#c2cee0}.chip[aria-pressed=true]{background:#4968a0;border-color:#4968a0}.searchbox input{border-color:#475872}.note{background:#3c3024;color:#f2c07b}.callout{background:#233553;color:#bbcfe9}.signmedia{background:#273243}.risk{background:#313e51;color:#acbed4}.favfilter.active{background:#4c3b1f;color:#f3d37c}.button{background:#366fed;color:#fff}.button:hover{background:#2960d0;color:#fff}.button.secondary{color:#cbdfff}.button.secondary:hover{background:#354b71;color:#e4edff}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
 .signmedia a{background-image:url("sign-unavailable.svg");background-position:center;background-size:76px 76px;background-repeat:no-repeat}.signmedia img{opacity:0;transition:opacity .16s ease}.signmedia img[src*="sign-unavailable.svg"]{opacity:1}
+
+/* Integration: third peer section and four-tab small-screen navigation */
+.featuregrid{grid-template-columns:repeat(auto-fit,minmax(245px,1fr))}
+@media(max-width:680px){.featuregrid{grid-template-columns:1fr}.appbottom{justify-content:space-between}.appbottom a{flex:1 1 0;min-width:0;padding:3px 2px;font-size:10px}}

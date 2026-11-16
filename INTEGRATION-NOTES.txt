@@ -1,0 +1,18 @@
+Autoškola HR-UA / Wiki95 integration (2026-11-16)
+
+Source repository inspected: https://github.com/olegdatsenko/autoskola-hr-ua
+GitHub Pages observed: https://olegdatsenko.github.io/autoskola-hr-ua/
+
+Sources:
+- Full exam: AutoskolaHRUA-Exam-Wiki95.zip
+- Applied over it: AutoskolaHRUA-Exam-Wiki95-update.zip
+- Pre-existing site export from 2026-11-04, brought in line with VERIFIED public current HTML/Umami and workflow differences.
+
+Updated: root index.html; slovnyk/index.html; znaky/index.html; assets/site.css;
+added: ispyt/ with latest exam files and 748 images; .github/workflows/deploy.yml brought to current observed version (vendor step removed).
+Umami: pre-existing website ID kept, exactly one script per HTML page.
+
+No Github write credentials available here. Publish contents of this package into the SAME repository root; do not remove any newer files not present in the archive.
+Confirm workflow Publish Autoškola HR-UA completes successfully and inspect /ispyt/ URL after deploy.
+
+Caution: Wiki95 key is only a client-side interface gate. All question images in public repository remain directly accessible. History is local browser storage and not synchronized between devices.

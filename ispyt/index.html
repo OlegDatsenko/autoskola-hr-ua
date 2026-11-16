@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="uk">
+<head><script defer src="https://cloud.umami.is/script.js" data-website-id="8c480e6f-8264-4912-a3ec-a88bf4ca7dd8"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17394b">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Autoškola HR–UA · Тренувальний екзамен</title>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+<script defer src="data.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<header class="header"><div class="head-inner">
+  <div class="identity"><div class="logo" aria-hidden="true"><span>HR</span><span>UA</span></div><div><div class="brand">Autoškola HR–UA</div><div class="subtitle">Тренувальний екзамен · Хорватія</div></div></div>
+  <nav class="sectionnav" aria-label="Основна навігація"><a href="../">Головна</a><a href="../slovnyk/">Словник</a><a href="../znaky/">Знаки</a><a href="./" aria-current="page">Іспит</a></nav>
+  <div class="header-actions"><div class="head-stats" id="head-stats" hidden><div class="time" id="time" aria-label="Час до завершення" role="timer">45:00</div><button id="finish-top" class="btn small subtle" type="button">Завершити</button></div><button id="lock-btn" class="btn small secondary" type="button" hidden>Закрити доступ</button></div>
+</div></header>
+<main class="main">
+<section id="gate" class="screen gate-screen">
+ <div class="gate-card">
+  <div class="eyebrow">ОБМЕЖЕНИЙ ДОСТУП · ТРЕНУВАЛЬНИЙ ЕКЗАМЕН</div>
+  <h1>Вхід до тренажера</h1>
+  <p>Введіть ключове слово, щоб відкрити екзамен і свою локальну історію помилок.</p>
+  <form id="gate-form" class="gate-form">
+   <label for="gate-key">Ключове слово</label>
+   <div class="gate-controls"><input id="gate-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required placeholder="Ключове слово"><button id="gate-submit" class="btn primary" type="submit">Увійти</button></div>
+   <p id="gate-error" class="gate-error" role="alert" aria-live="polite"></p>
+  </form>
+  <p class="hint">Історія зберігається лише у цьому браузері на цьому пристрої. Це базове обмеження інтерфейсу, не серверний захист файлів.</p>
+ </div>
+</section>
+<section id="home" class="screen" hidden>
+  <div class="intro"><div class="eyebrow">ПІДГОТОВКА ДО ТЕОРЕТИЧНОГО ІСПИТУ</div><h1>Тренувальний екзамен</h1><p>Оригінальні хорватські питання — без змін. Відповідайте на них у форматі іспиту, а після завершення перегляньте свій результат.</p></div>
+  <div class="facts"><div><strong>38</strong><span>випадкових питань</span></div><div><strong>45:00</strong><span>хвилин</span></div><div><strong>4</strong><span>питання про пріоритет*</span></div></div>
+  <div class="history-panel" aria-live="polite"><div><strong>Повторення помилок</strong><p id="history-summary">Історія ще не створена.</p></div><span id="history-active" class="history-count">0</span></div>
+  <div class="home-card"><h2>Як це працює</h2><p>Можна обирати одну або кілька літер, номер зображення чи вводити число. Переходьте між питаннями в будь-якому порядку. Після завершення буде коротка таблиця з оцінкою кожної відповіді.</p><p class="hint">* Чотири питання про пріоритет — налаштування цього тренажера, а не підтверджена офіційна квота. Час не зупиняється після закриття сторінки.</p>
+   <div class="home-actions"><button class="btn primary" id="start-btn" type="button">Почати новий екзамен</button><button class="btn secondary" id="resume-btn" type="button" hidden>Продовжити попередній</button><button class="btn secondary" id="show-last-btn" type="button" hidden>Попередній результат</button></div>
+  </div>
+  <p class="disclaimer">Навчальний прототип на основі наданих PDF, не офіційна екзаменаційна система HAK. Історія помилок і відповіді зберігаються тільки в цьому браузері.</p>
+</section>
+<section id="exam" class="screen" hidden>
+  <div class="exam-top"><div><div class="eyebrow" id="q-progress">ПИТАННЯ 1 ІЗ 38</div><h1 id="q-heading">Питання №1</h1><div class="tags"><span class="tag" id="q-type">Варіанти A–D</span><span class="tag priority" id="priority-label" hidden>Пріоритет руху</span><span class="tag review" id="review-label" hidden>Повторення помилки</span></div></div><button class="btn small secondary" id="zoom-btn" type="button" aria-pressed="false">Збільшити сторінку</button></div>
+  <div class="paper-wrap" id="paper-wrap"><div class="paper" id="paper"><img id="q-image" alt="Оригінальна незмінена сторінка питання з PDF" draggable="false"><div class="overlay-layer" id="overlays"></div></div></div>
+  <div class="answer-area"><div class="answer-title">Ваша відповідь <span id="answer-note">можна вибрати декілька варіантів</span></div><div class="answer-controls" id="answer-controls"></div></div>
+  <div class="exam-bottom"><button type="button" class="btn secondary" id="prev-btn">Попереднє</button><span id="saved-status" role="status">Відповідь зберігається автоматично</span><button type="button" class="btn primary" id="next-btn">Наступне</button></div>
+  <div class="question-nav-heading">Усі питання <span id="answered-count">0 із 38 з відповіддю</span></div><div id="question-nav" class="question-nav" aria-label="Перехід між питаннями"></div>
+  <div class="exam-bottom final-actions"><button type="button" class="btn danger-outline" id="finish-bottom">Завершити екзамен і переглянути звіт</button></div>
+</section>
+<section id="result" class="screen" hidden>
+ <div class="eyebrow">ЕКЗАМЕН ЗАВЕРШЕНО</div><h1>Результат тренування</h1>
+ <div class="result-stats"><div><strong id="result-correct">0</strong><span>правильних</span></div><div><strong id="result-wrong">0</strong><span>неправильних / без відповіді</span></div><div><strong id="result-percent">0%</strong><span>точність</span></div></div>
+ <p id="result-reason" class="result-note"></p><p id="priority-note" class="result-note"></p><p id="history-result" class="result-note"></p>
+ <div class="result-actions"><button type="button" class="btn primary" id="new-exam-btn">Новий екзамен</button><button type="button" class="btn secondary" id="export-btn">Завантажити CSV</button><label class="inline-check"><input id="show-key" type="checkbox"> Показати правильні відповіді</label></div>
+ <div class="result-table-wrap"><table><thead><tr><th>№ з/п</th><th>№ питання</th><th>Ваша відповідь</th><th>Оцінка</th><th class="key-col" hidden>Правильна</th></tr></thead><tbody id="result-body"></tbody></table></div>
+ <p class="disclaimer">Звіт показує точний збіг із ключем наданого PDF. Це не офіційний підрахунок балів HAK.</p>
+</section>
+</main>
+<div id="confirm" class="modal-layer" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading"><h2 id="modal-heading">Завершити екзамен?</h2><p id="modal-text">Надані відповіді будуть перевірені, пропущені питання зараховано як неправильні.</p><div class="modal-actions"><button id="cancel-confirm" type="button" class="btn secondary">Продовжити</button><button id="accept-confirm" type="button" class="btn primary">Завершити</button></div></div></div>
+<nav class="exam-appbottom" aria-label="Мобільна навігація"><a href="../"><span aria-hidden="true">⌂</span>Головна</a><a href="../slovnyk/"><span aria-hidden="true">Аа</span>Словник</a><a href="../znaky/"><span aria-hidden="true">△</span>Знаки</a><a href="./" aria-current="page"><span aria-hidden="true">38</span>Іспит</a></nav>
+</body>
+</html>
