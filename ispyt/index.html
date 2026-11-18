@@ -8,9 +8,9 @@
 <title>Autoškola HR–UA · Тренувальний екзамен</title>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=3">
 <script defer src="data.js"></script>
-<script defer src="app.js"></script>
+<script defer src="app.js?v=3"></script>
 </head>
 <body>
 <header class="header"><div class="head-inner">
@@ -34,9 +34,14 @@
 </section>
 <section id="home" class="screen" hidden>
   <div class="intro"><div class="eyebrow">ПІДГОТОВКА ДО ТЕОРЕТИЧНОГО ІСПИТУ</div><h1>Тренувальний екзамен</h1><p>Оригінальні хорватські питання — без змін. Відповідайте на них у форматі іспиту, а після завершення перегляньте свій результат.</p></div>
-  <div class="facts"><div><strong>38</strong><span>випадкових питань</span></div><div><strong>45:00</strong><span>хвилин</span></div><div><strong>4</strong><span>питання про пріоритет*</span></div></div>
+  <div class="facts"><div><strong>38</strong><span>випадкових питань</span></div><div><strong>45:00</strong><span>хвилин</span></div><div><strong>4 / 2</strong><span>питання про пріоритет*</span></div></div>
   <div class="history-panel" aria-live="polite"><div><strong>Повторення помилок</strong><p id="history-summary">Історія ще не створена.</p></div><span id="history-active" class="history-count">0</span></div>
-  <div class="home-card"><h2>Як це працює</h2><p>Можна обирати одну або кілька літер, номер зображення чи вводити число. Переходьте між питаннями в будь-якому порядку. Після завершення буде коротка таблиця з оцінкою кожної відповіді.</p><p class="hint">* Чотири питання про пріоритет — налаштування цього тренажера, а не підтверджена офіційна квота. Час не зупиняється після закриття сторінки.</p>
+
+  <div class="backup-controls" aria-label="Резервна копія прогресу">
+   <button type="button" class="btn secondary backup-export" id="backup-export-home">Завантажити всю історію (JSON)</button>
+   <button type="button" class="btn secondary backup-import" id="backup-import-home">Відновити історію з файлу</button>
+  </div>
+  <div class="home-card"><h2>Як це працює</h2><p>Можна обирати одну або кілька літер, номер зображення чи вводити число. Переходьте між питаннями в будь-якому порядку. Після завершення буде коротка таблиця з оцінкою кожної відповіді.</p><p class="hint">* Зазвичай чотири, після вичерпання незасвоєних питань про пріоритет — два (за потреби повторно) — налаштування цього тренажера, а не підтверджена офіційна квота. Час не зупиняється після закриття сторінки.</p>
    <div class="home-actions"><button class="btn primary" id="start-btn" type="button">Почати новий екзамен</button><button class="btn secondary" id="resume-btn" type="button" hidden>Продовжити попередній</button><button class="btn secondary" id="show-last-btn" type="button" hidden>Попередній результат</button></div>
   </div>
   <p class="disclaimer">Навчальний прототип на основі наданих PDF, не офіційна екзаменаційна система HAK. Історія помилок і відповіді зберігаються тільки в цьому браузері.</p>
@@ -53,10 +58,28 @@
  <div class="eyebrow">ЕКЗАМЕН ЗАВЕРШЕНО</div><h1>Результат тренування</h1>
  <div class="result-stats"><div><strong id="result-correct">0</strong><span>правильних</span></div><div><strong id="result-wrong">0</strong><span>неправильних / без відповіді</span></div><div><strong id="result-percent">0%</strong><span>точність</span></div></div>
  <p id="result-reason" class="result-note"></p><p id="priority-note" class="result-note"></p><p id="history-result" class="result-note"></p>
+
+ <section class="all-progress" aria-label="Загальний прогрес за всіма іспитами">
+  <div class="all-progress-header"><h2>Загальний прогрес · Wiki95</h2><strong id="overview-percent">0%</strong></div>
+  <div class="all-progress-bar" role="img" aria-label="Засвоєно, на повторення, не зафіксовано">
+   <span id="overview-bar-mastered" class="bar-mastered"></span><span id="overview-bar-review" class="bar-review"></span><span id="overview-bar-unrecorded" class="bar-unrecorded"></span>
+  </div>
+  <div class="all-progress-stats"><div><b class="mastered-dot"></b> Правильно <strong id="overview-mastered">0</strong></div>
+   <div><b class="review-dot"></b> Повторити <strong id="overview-review">0</strong></div>
+   <div><b class="unrecorded-dot"></b> Не зафіксовано <strong id="overview-unrecorded">748</strong></div></div>
+  <p id="overview-note" class="result-note"></p>
+ </section>
+
+
+ <div class="backup-controls" aria-label="Резервна копія прогресу">
+  <button type="button" class="btn secondary backup-export" id="backup-export-result">Завантажити всю історію (JSON)</button>
+  <button type="button" class="btn secondary backup-import" id="backup-import-result">Відновити історію з файлу</button>
+ </div>
  <div class="result-actions"><button type="button" class="btn primary" id="new-exam-btn">Новий екзамен</button><button type="button" class="btn secondary" id="export-btn">Завантажити CSV</button><label class="inline-check"><input id="show-key" type="checkbox"> Показати правильні відповіді</label></div>
  <div class="result-table-wrap"><table><thead><tr><th>№ з/п</th><th>№ питання</th><th>Ваша відповідь</th><th>Оцінка</th><th class="key-col" hidden>Правильна</th></tr></thead><tbody id="result-body"></tbody></table></div>
  <p class="disclaimer">Звіт показує точний збіг із ключем наданого PDF. Це не офіційний підрахунок балів HAK.</p>
 </section>
+<input id="backup-import-file" type="file" accept="application/json,.json" hidden aria-label="Оберіть резервну копію Wiki95">
 </main>
 <div id="confirm" class="modal-layer" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading"><h2 id="modal-heading">Завершити екзамен?</h2><p id="modal-text">Надані відповіді будуть перевірені, пропущені питання зараховано як неправильні.</p><div class="modal-actions"><button id="cancel-confirm" type="button" class="btn secondary">Продовжити</button><button id="accept-confirm" type="button" class="btn primary">Завершити</button></div></div></div>
 <nav class="exam-appbottom" aria-label="Мобільна навігація"><a href="../"><span aria-hidden="true">⌂</span>Головна</a><a href="../slovnyk/"><span aria-hidden="true">Аа</span>Словник</a><a href="../znaky/"><span aria-hidden="true">△</span>Знаки</a><a href="./" aria-current="page"><span aria-hidden="true">38</span>Іспит</a></nav>

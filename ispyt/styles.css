@@ -54,3 +54,16 @@
  font-size:22px;font-weight:800;text-align:center;color:#17394b;background:transparent;border:0;padding:0;outline-offset:1px}
 .over-numeric:focus{outline:3px solid #176f8a;border-radius:2px;background:rgba(255,255,255,.75)}
 @media(max-width:840px){.paper:not(.zoomed) .overlay-layer{display:none}}
+
+
+/* Progress and local JSON backup; isolated to the exam section. */
+.all-progress{background:#fff;border:1px solid #d5e0e7;border-radius:12px;padding:19px;margin:18px 0}
+.all-progress-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.all-progress-header h2{margin:0 0 12px;font-size:17px}.all-progress-header strong{font-size:22px;color:#17394b}
+.all-progress-bar{height:17px;border-radius:7px;display:flex;overflow:hidden;background:#d0d8de}
+.all-progress-bar span{min-width:0;flex:0 1 0%}.bar-mastered,.mastered-dot{background:#258b65}.bar-review,.review-dot{background:#d77152}.bar-unrecorded,.unrecorded-dot{background:#b9c5ce}
+.all-progress-stats{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin:14px 0;font-size:13px}
+.all-progress-stats div{display:flex;gap:6px;align-items:center}.all-progress-stats b{display:inline-block;width:10px;height:10px;border-radius:2px}
+.all-progress-stats strong{margin-left:2px;font-variant-numeric:tabular-nums}.all-progress .result-note{margin-bottom:0}
+.backup-controls{display:flex;flex-wrap:wrap;gap:9px;margin:13px 0}
+@media(max-width:600px){.all-progress{padding:14px}.backup-controls .btn{flex:1 1 180px;white-space:normal;font-size:13px}}

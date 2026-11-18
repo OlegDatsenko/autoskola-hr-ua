@@ -21,9 +21,105 @@
   return {version:1,wrongs:{},processed:[]};
  };
  const saveHistory=()=>{try{if(HISTORY_STORE)localStorage.setItem(HISTORY_STORE,JSON.stringify(history))}catch{}};
- const pendingReview=()=>Object.keys(history.wrongs).map(Number).filter(id=>byId.has(id)&&history.wrongs[id]?.needsReview);
+ const pendingReview=()=>Object.keys(progress?.questions||{}).map(Number).filter(id=>byId.has(id)&&progress.questions[id]?.status==='review');
  // Prioritize wrong answers, randomly within the same number of previous mistakes.
- const pickReview=(ids,limit)=>shuffled(ids).sort((a,b)=>(history.wrongs[b]?.wrongCount||0)-(history.wrongs[a]?.wrongCount||0)).slice(0,limit);
+ const pickReview=(ids,limit)=>shuffled(ids).sort((a,b)=>(progress?.questions?.[b]?.wrongCount||0)-(progress?.questions?.[a]?.wrongCount||0)).slice(0,limit);
+
+ const PROGRESS_VERSION=3, BANK_SIZE=748;
+ let PROGRESS_STORE=null, progress=null;
+ const blankProgress=()=>({version:PROGRESS_VERSION,questions:{},exams:[],legacyIncomplete:false,legacyExamIds:[],updatedAt:null});
+ const readProgress=()=>{
+  try{
+   const v=JSON.parse(localStorage.getItem(PROGRESS_STORE)||'null');
+   if(v?.version===PROGRESS_VERSION && v.questions && typeof v.questions==='object' && Array.isArray(v.exams))return v;
+  }catch{}
+  const v=blankProgress();
+  // Upgrade the original Wiki95 incorrect-answer bank without erasing its history.
+  for(const [id,prior] of Object.entries(history.wrongs||{})){
+   if(!byId.has(Number(id)))continue;
+   v.questions[id]={status:prior.needsReview?'review':'mastered',
+    wrongCount:Math.max(0,Number(prior.wrongCount)||0),rightCount:Math.max(0,Number(prior.correctAfterWrong)||0),
+    lastWrongAt:prior.lastWrongAt||null,lastCorrectAt:prior.lastCorrectAt||null,legacy:true};
+  }
+  v.legacyExamIds=history.processed.slice();
+  v.legacyIncomplete=history.processed.length>0;
+  return v;
+ };
+ const saveProgress=()=>{try{localStorage.setItem(PROGRESS_STORE,JSON.stringify(progress));return true}catch(e){console.warn('Cannot save progress',e);return false}};
+ const mastered=id=>progress?.questions?.[id]?.status==='mastered';
+ const unmastered=ids=>ids.filter(id=>!mastered(id));
+ const overview=()=>{
+  let masteredCount=0,reviewCount=0;
+  for(const q of EXAM_QUESTIONS){
+   const s=progress?.questions?.[q.id]?.status;
+   if(s==='mastered')masteredCount++;
+   else if(s==='review')reviewCount++;
+  }
+  return {mastered:masteredCount,review:reviewCount,unrecorded:BANK_SIZE-masteredCount-reviewCount};
+ };
+ const drawOverview=()=>{
+  const s=overview();
+  for(const [part,value] of Object.entries(s)){
+   const number=$('overview-'+part),bar=$('overview-bar-'+part);
+   if(number)number.textContent=String(value);
+   if(bar)bar.style.flex=String(value)+' 1 0%';
+  }
+  const percent=$('overview-percent');if(percent)percent.textContent=(s.mastered*100/BANK_SIZE).toFixed(1).replace('.',',')+'%';
+  const note=$('overview-note');if(note)note.textContent=progress.legacyIncomplete
+   ? 'Історія до оновлення збережена частково: деякі давні правильні відповіді невідомі. «Не зафіксовано» не обов’язково означає «не зустрічалося».'
+   : 'Усі категорії — унікальні номери питань. «Не зафіксовано» означає, що питання ще не потрапляло до завершених іспитів цього профілю.';
+ };
+ function exportProgress(){
+  if(!unlocked || !PROGRESS_STORE)return;
+  // Save the active or last exam as well as every exam recorded since the upgrade.
+  const snapshot={format:'autoskola-hrua-wiki95-backup',schema:1,keyFingerprint:KEY_HASH.slice(0,16),
+   exportedAt:new Date().toISOString(),bankSize:BANK_SIZE,progress,legacyWrongHistory:history,examState:state};
+  const body=JSON.stringify(snapshot,null,2);
+  const url=URL.createObjectURL(new Blob([body],{type:'application/json;charset=utf-8'}));
+  const a=document.createElement('a');a.href=url;
+  a.download='wiki95-progress-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+ }
+ function validExamState(s){
+  return s===null || (s?.version===VERSION && Array.isArray(s.ids) && s.ids.length>=1 && s.ids.length<=TOTAL &&
+   new Set(s.ids).size===s.ids.length && s.ids.every(id=>Number.isInteger(id)&&byId.has(id)) &&
+   s.answers && typeof s.answers==='object' && typeof s.endAt==='number' && Number.isFinite(s.endAt));
+ }
+ function validBackup(obj){
+  if(obj?.format!=='autoskola-hrua-wiki95-backup' || obj.schema!==1 || obj.bankSize!==BANK_SIZE ||
+     obj.keyFingerprint!==KEY_HASH.slice(0,16))return false;
+  const p=obj.progress;
+  if(p?.version!==PROGRESS_VERSION || !p.questions || typeof p.questions!=='object' ||
+     !Array.isArray(p.exams) || p.exams.length>20000 || Object.keys(p.questions).length>BANK_SIZE)return false;
+  for(const [id,q] of Object.entries(p.questions)){
+   if(!/^\d{1,3}$/.test(id)||!byId.has(Number(id))||!['review','mastered'].includes(q?.status))return false;
+  }
+  for(const ex of p.exams){
+   if(typeof ex?.examId!=='string'||ex.examId.length>100 ||!Array.isArray(ex.entries)||ex.entries.length>TOTAL||
+      ex.entries.some(e=>!Number.isInteger(e?.id)||!byId.has(e.id)||typeof e.answer!=='string'||e.answer.length>100||typeof e.correct!=='boolean'))return false;
+  }
+  if(!validExamState(obj.examState??null))return false;
+  const h=obj.legacyWrongHistory;
+  if(!h || h.version!==1 || !h.wrongs || typeof h.wrongs!=='object'|| !Array.isArray(h.processed))return false;
+  return true;
+ }
+ async function importProgress(file){
+  if(!unlocked||!file)return;
+  if(file.size>15*1024*1024){alert('Файл надто великий (максимум 15 МБ).');return}
+  let data;
+  try{data=JSON.parse(await file.text())}catch{alert('Не вдалося прочитати файл JSON.');return}
+  if(!validBackup(data)){alert('Несумісна або пошкоджена копія. Перевірте ключове слово та формат файлу.');return}
+  if(!confirm('Відновити резервну копію? Поточну локальну історію й активний екзамен буде ЗАМІНЕНО даними з файлу.'))return;
+  try{
+   localStorage.setItem(PROGRESS_STORE,JSON.stringify(data.progress));
+   localStorage.setItem(HISTORY_STORE,JSON.stringify(data.legacyWrongHistory));
+   if(data.examState)localStorage.setItem(STORE,JSON.stringify(data.examState));
+   else localStorage.removeItem(STORE);
+   progress=readProgress();history=readHistory();restore();
+   alert('Історію відновлено. Якщо збережений екзамен прострочений, його буде завершено за таймером.');
+  }catch(e){alert('Не вдалося записати резервну копію в браузер: '+(e?.message||e));}
+ }
+
  async function digest(s){
   if(!globalThis.crypto?.subtle)throw Error('Для перевірки ключа відкрийте сторінку через HTTPS або сучасний браузер.');
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
@@ -31,13 +127,13 @@
  }
  function lockAccess(){
   try{sessionStorage.removeItem(AUTH_SESSION)}catch{}
-  unlocked=false;STORE=null;HISTORY_STORE=null;state=null;history={version:1,wrongs:{},processed:[]};
+  unlocked=false;STORE=null;HISTORY_STORE=null;PROGRESS_STORE=null;progress=null;state=null;history={version:1,wrongs:{},processed:[]};
   $('gate-key').value='';$('gate-error').textContent='';showScreen('gate');$('gate-key').focus();
  }
  function setAccess(hash){
   unlocked=true;STORE='autoskola_hrua_exam_v2_'+hash.slice(0,16);
   HISTORY_STORE='autoskola_hrua_wrong_history_v2_'+hash.slice(0,16);
-  history=readHistory();try{sessionStorage.setItem(AUTH_SESSION,hash)}catch{}
+  history=readHistory();PROGRESS_STORE='autoskola_hrua_progress_v3_'+hash.slice(0,16);progress=readProgress();saveProgress();try{sessionStorage.setItem(AUTH_SESSION,hash)}catch{}
   $('gate-key').value='';$('gate-error').textContent='';restore();
  }
  async function unlock(raw){
@@ -72,13 +168,12 @@
   $('head-stats').hidden=name!=='exam';$('lock-btn').hidden=name==='gate';
   window.scrollTo({top:0,behavior:'auto'});
  };
+
  function updateHome(){
-  const queued=pendingReview().length,all=Object.keys(history.wrongs).length;
+  const queued=pendingReview().length, stats=overview();
   $('history-active').textContent=String(queued);
-  $('history-summary').textContent=all===0
-   ? 'Після першого екзамену тут з’являться питання, на які ви відповіли неправильно.'
-   : `Потрібно повторити: ${queued} із ${all} питань, на яких раніше були помилки. Правильна повторна відповідь прибирає питання з черги, але залишає в історії.`;
-  const active=state && !state.finishedAt && state.ids.length===TOTAL;
+  $('history-summary').textContent=`Засвоєно: ${stats.mastered} із 748. На повторення: ${queued}. Не зафіксовано: ${stats.unrecorded}.`;
+  const active=state && !state.finishedAt && state.ids.length>=1;
   $('resume-btn').hidden=!active;
   $('show-last-btn').hidden=!(state && state.finishedAt);
   $('start-btn').textContent=active?'Почати інший екзамен':'Почати новий екзамен';
@@ -99,8 +194,8 @@
     }
    }
    const s=JSON.parse(raw||'null');
-   if(s?.version===VERSION && Array.isArray(s.ids) && s.ids.length===TOTAL && new Set(s.ids).size===TOTAL && s.ids.every(id=>byId.has(id)) && s.answers && typeof s.endAt==='number' && Number.isFinite(s.endAt)){
-    state=s;state.index=Math.min(37,Math.max(0,Number(state.index)||0));
+   if(s?.version===VERSION && Array.isArray(s.ids) && s.ids.length>=1 && s.ids.length<=TOTAL && new Set(s.ids).size===s.ids.length && s.ids.every(id=>byId.has(id)) && s.answers && typeof s.endAt==='number' && Number.isFinite(s.endAt)){
+    state=s;state.index=Math.min(state.ids.length-1,Math.max(0,Number(state.index)||0));
     state.reviewIds=Array.isArray(state.reviewIds)?state.reviewIds:[];
     if(!state.finishedAt && Date.now()>=state.endAt)finishExam('time');
     if(state.finishedAt)recordHistory();
@@ -108,17 +203,33 @@
   }catch(e){console.warn('Відновлення недоступне',e)}
   updateHome();showScreen('home');
  }
+
  function startExam(){
   if(!unlocked)return;
-  const due=pendingReview(),duePriority=due.filter(id=>prioritySet.has(id)),dueOther=due.filter(id=>!prioritySet.has(id));
-  const repeatPriority=pickReview(duePriority,PRIORITY);
-  const required=[...repeatPriority,...shuffled(PRIORITY_IDS.filter(id=>!repeatPriority.includes(id))).slice(0,PRIORITY-repeatPriority.length)];
-  const repeatOther=pickReview(dueOther,TOTAL-PRIORITY);
-  const rest=[...repeatOther,...shuffled(EXAM_QUESTIONS.map(q=>q.id).filter(id=>!prioritySet.has(id) && !repeatOther.includes(id))).slice(0,TOTAL-PRIORITY-repeatOther.length)];
-  const ids=shuffled([...required,...rest]);
-  const reviewIds=[...repeatPriority,...repeatOther];
-  if(ids.length!==TOTAL || new Set(ids).size!==TOTAL || ids.filter(id=>prioritySet.has(id)).length!==PRIORITY)throw Error('Помилка відбору питань');
-  const now=Date.now();state={version:VERSION,examId:String(now)+'_'+Math.random().toString(36).slice(2,9),ids,reviewIds,answers:{},index:0,startedAt:now,endAt:now+DURATION,finishedAt:null,reason:null};zoomed=false;safeSet(state);showScreen('exam');renderExam();
+  const available=EXAM_QUESTIONS.map(q=>q.id).filter(id=>!mastered(id));
+  if(available.length===0){alert('Усі 748 питань уже засвоєно. Новий екзамен не потрібний.');return}
+  const remainingPriority=PRIORITY_IDS.filter(id=>!mastered(id));
+  // Default: 4 unmastered priority questions. When fewer than 4 remain,
+  // enforce a minimum of 2 priority questions, reusing mastered priority questions only as a necessary exception.
+  const targetPriority=remainingPriority.length>=4?4:2;
+  const duePriority=pickReview(remainingPriority.filter(id=>progress.questions[id]?.status==='review'),targetPriority);
+  let chosenPriority=[...duePriority];
+  chosenPriority.push(...shuffled(remainingPriority.filter(id=>!chosenPriority.includes(id))).slice(0,targetPriority-chosenPriority.length));
+  if(chosenPriority.length<targetPriority){
+   chosenPriority.push(...shuffled(PRIORITY_IDS.filter(id=>mastered(id)&&!chosenPriority.includes(id))).slice(0,targetPriority-chosenPriority.length));
+  }
+  const availableOther=EXAM_QUESTIONS.map(q=>q.id).filter(id=>!prioritySet.has(id)&&!mastered(id));
+  const countOther=Math.min(TOTAL-chosenPriority.length,availableOther.length);
+  const dueOther=pickReview(availableOther.filter(id=>progress.questions[id]?.status==='review'),countOther);
+  const chosenOther=[...dueOther,...shuffled(availableOther.filter(id=>!dueOther.includes(id))).slice(0,countOther-dueOther.length)];
+  const ids=shuffled([...chosenPriority,...chosenOther]);
+  if(ids.length===0||ids.length>TOTAL||new Set(ids).size!==ids.length||ids.filter(id=>prioritySet.has(id)).length!==targetPriority){
+   alert('Не вдалося сформувати екзамен із доступних питань.');return;
+  }
+  const reviewIds=ids.filter(id=>progress.questions[id]?.status==='review');
+  const now=Date.now();
+  state={version:VERSION,examId:String(now)+'_'+Math.random().toString(36).slice(2,9),ids,reviewIds,answers:{},index:0,startedAt:now,endAt:now+DURATION,finishedAt:null,reason:null};
+  zoomed=false;safeSet(state);showScreen('exam');renderExam();
  }
  function choose(v){
   if(!state || state.finishedAt || Date.now()>=state.endAt){tick();return}
@@ -182,7 +293,7 @@
  function renderExam(){
   if(!state || state.finishedAt)return;
   if(Date.now()>=state.endAt){finishExam('time');return}
-  const q=activeQ();$('q-progress').textContent='ПИТАННЯ '+(state.index+1)+' ІЗ '+TOTAL;
+  const q=activeQ();$('q-progress').textContent='ПИТАННЯ '+(state.index+1)+' ІЗ '+state.ids.length;
   $('q-heading').textContent='Питання №'+q.id;
   $('q-type').textContent=q.type==='multi'?'Варіанти A–D':q.type==='picture'?'Вибір зображення 1–3':'Числова відповідь';
   $('priority-label').hidden=!prioritySet.has(q.id);$('review-label').hidden=!state.reviewIds.includes(q.id);
@@ -190,30 +301,47 @@
   $('q-image').alt='Оригінальна PDF-сторінка із запитанням №'+q.id;
   $('q-image').onerror=()=>{$('saved-status').textContent='Не вдалося відкрити зображення №'+q.id+'. Перевірте папку questions.'};
   drawChoices();drawOverlay();drawNav();
-  $('prev-btn').disabled=state.index===0;$('next-btn').disabled=state.index===TOTAL-1;
-  $('next-btn').textContent=state.index===TOTAL-1?'Останнє питання':'Наступне';
+  $('prev-btn').disabled=state.index===0;$('next-btn').disabled=state.index===state.ids.length-1;
+  $('next-btn').textContent=state.index===state.ids.length-1?'Останнє питання':'Наступне';
   $('saved-status').textContent='Зберігається автоматично';
   $('paper').classList.toggle('zoomed',zoomed);$('zoom-btn').textContent=zoomed?'Вписати сторінку':'Збільшити сторінку';$('zoom-btn').setAttribute('aria-pressed',String(zoomed));
   tick();
  }
  function move(idx){if(!state||state.finishedAt)return;state.index=Math.max(0,Math.min(TOTAL-1,idx));safeSet(state);renderExam();}
  function tick(){if(!state || state.finishedAt)return;const left=state.endAt-Date.now();$('time').textContent=fmtMs(left);$('time').classList.toggle('urgent',left<=5*60*1000);if(left<=0)finishExam('time')}
+
  function recordHistory(){
-  if(!state?.finishedAt || !unlocked)return;
+  if(!state?.finishedAt || !unlocked || !progress)return;
   const examId=String(state.examId||'legacy_'+state.startedAt);
-  if(history.processed.includes(examId))return;
+  if(progress.exams.some(ex=>ex.examId===examId))return;
+  const alreadyProcessed=history.processed.includes(examId);
+  const entries=[];
   for(const id of state.ids){
-   if(!isAnswered(id))continue; // Unanswered is wrong in the report, but is not a wrong answer in the repetition history.
-   const old=history.wrongs[id];
-   if(isCorrect(id)){
-    if(old){old.needsReview=false;old.lastCorrectAt=state.finishedAt;old.correctAfterWrong=(old.correctAfterWrong||0)+1}
-   }else{
-    history.wrongs[id]={...old,wrongCount:(old?.wrongCount||0)+1,lastWrongAt:state.finishedAt,lastWrongAnswer:answerFor(id),needsReview:true};
+   const correct=isCorrect(id),answered=isAnswered(id),old=progress.questions[id]||{};
+   const entry={id,answer:answerFor(id),correct,answered};entries.push(entry);
+   const everMastered=old.status==='mastered';
+   progress.questions[id]={...old,
+    status:correct||everMastered?'mastered':'review',
+    wrongCount:(Number(old.wrongCount)||0)+(!correct&&!alreadyProcessed?1:0),
+    rightCount:(Number(old.rightCount)||0)+(correct&&!alreadyProcessed?1:0),
+    lastAttemptAt:state.finishedAt,
+    lastWrongAt:!correct?state.finishedAt:old.lastWrongAt||null,
+    lastCorrectAt:correct?state.finishedAt:old.lastCorrectAt||null};
+   const w=history.wrongs[id];
+   if(correct){
+    if(w){w.needsReview=false;w.lastCorrectAt=state.finishedAt;
+     if(!alreadyProcessed)w.correctAfterWrong=(w.correctAfterWrong||0)+1}
+   }else if(!alreadyProcessed && !everMastered){
+    history.wrongs[id]={...w,wrongCount:(w?.wrongCount||0)+1,lastWrongAt:state.finishedAt,
+     lastWrongAnswer:answerFor(id),needsReview:true};
    }
   }
-  history.processed.push(examId);
-  if(history.processed.length>1000)history.processed=history.processed.slice(-1000);
-  saveHistory();
+  progress.exams.push({examId,startedAt:state.startedAt,finishedAt:state.finishedAt,
+   reason:state.reason||'manual',entries});
+  progress.updatedAt=state.finishedAt;
+  if(!alreadyProcessed){history.processed.push(examId);if(history.processed.length>1000)history.processed=history.processed.slice(-1000)}
+  // Write progress first, followed by the backward-compatible original wrong-answer bank.
+  saveProgress();saveHistory();
  }
  function finishExam(reason){
   if(!state||state.finishedAt)return;
@@ -221,16 +349,18 @@
   if(currentScreen==='exam'){hideConfirm();showScreen('result');renderResult()}
  }
  const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
  function renderResult(){
   if(!state?.finishedAt)return;
-  showScreen('result');const correct=score(),wrong=TOTAL-correct;
-  $('result-correct').textContent=String(correct);$('result-wrong').textContent=String(wrong);$('result-percent').textContent=Math.round(100*correct/TOTAL)+'%';
+  showScreen('result');const correct=score(),wrong=state.ids.length-correct;
+  $('result-correct').textContent=String(correct);$('result-wrong').textContent=String(wrong);
+  $('result-percent').textContent=Math.round(100*correct/state.ids.length)+'%';
   $('result-reason').textContent=state.reason==='time'?'Час вичерпано: незаповнені питання оцінено як неправильні.':'Завершено вручну. Незаповнені питання оцінено як неправильні.';
   const p=state.ids.filter(id=>prioritySet.has(id)),failed=p.filter(id=>!isCorrect(id));
   $('priority-note').textContent='Питання про пріоритет руху: '+p.length+' у цьому варіанті, неправильних відповідей: '+failed.length+'.';
-  const wrongAnswered=state.ids.filter(id=>isAnswered(id)&&!isCorrect(id)).length;
-  $('history-result').textContent=`Із попередніх помилок включено: ${state.reviewIds.length}. У черзі на повторення зараз: ${pendingReview().length}. Нових неправильних відповідей у цьому екзамені: ${wrongAnswered}. Питання без відповіді не додаються до історії помилок.`;
-  $('show-key').checked=false;fillResultTable();
+  const incorrect=state.ids.filter(id=>!isCorrect(id)).length;
+  $('history-result').textContent=`Із попередніх помилок включено: ${state.reviewIds.length}. Потребують повторення: ${pendingReview().length}. Неправильних або пропущених у цьому екзамені: ${incorrect}.`;
+  drawOverview();$('show-key').checked=false;fillResultTable();
  }
  function fillResultTable(){
   const show=$('show-key').checked;
@@ -253,7 +383,7 @@
  function hideConfirm(){$('confirm').hidden=true;confirmation=null;}
  function askConfirm(kind){
   confirmation=kind;$('confirm').hidden=false;
-  if(kind==='finish'){$('modal-heading').textContent='Завершити екзамен?';$('modal-text').textContent='Без відповіді залишилося '+(TOTAL-answeredCount())+' питань. Після завершення можна буде переглянути звіт.';$('accept-confirm').textContent='Завершити';}
+  if(kind==='finish'){$('modal-heading').textContent='Завершити екзамен?';$('modal-text').textContent='Без відповіді залишилося '+(state.ids.length-answeredCount())+' питань. Після завершення можна буде переглянути звіт.';$('accept-confirm').textContent='Завершити';}
   else{$('modal-heading').textContent='Почати новий екзамен?';$('modal-text').textContent='Поточний незавершений екзамен буде замінено новим. Збережені відповіді зникнуть.';$('accept-confirm').textContent='Почати новий';}
  }
  function handleNew(){if(state&&!state.finishedAt)askConfirm('restart');else startExam()}
@@ -261,6 +391,8 @@
   $('gate-form').addEventListener('submit',ev=>{ev.preventDefault();unlock($('gate-key').value)});
   $('lock-btn').addEventListener('click',lockAccess);
   $('start-btn').addEventListener('click',handleNew);$('resume-btn').addEventListener('click',()=>{if(state&&!state.finishedAt){showScreen('exam');renderExam()}});$('show-last-btn').addEventListener('click',renderResult);
+  for(const suffix of ['home','result']){ $('backup-export-'+suffix).addEventListener('click',exportProgress); $('backup-import-'+suffix).addEventListener('click',()=>$('backup-import-file').click()); }
+  $('backup-import-file').addEventListener('change',ev=>{const file=ev.target.files?.[0];ev.target.value='';importProgress(file)});
   $('new-exam-btn').addEventListener('click',startExam);$('export-btn').addEventListener('click',csv);$('show-key').addEventListener('change',fillResultTable);
   $('finish-top').addEventListener('click',()=>askConfirm('finish'));$('finish-bottom').addEventListener('click',()=>askConfirm('finish'));
   $('prev-btn').addEventListener('click',()=>move(state.index-1));$('next-btn').addEventListener('click',()=>move(state.index+1));
