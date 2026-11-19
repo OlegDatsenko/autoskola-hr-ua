@@ -26,6 +26,9 @@
  const pickReview=(ids,limit)=>shuffled(ids).sort((a,b)=>(progress?.questions?.[b]?.wrongCount||0)-(progress?.questions?.[a]?.wrongCount||0)).slice(0,limit);
 
  const PROGRESS_VERSION=3, BANK_SIZE=748;
+ const MAX_REVIEW=2, REINFORCE_HISTORY=20, REINFORCE_CLEAN=12, REINFORCE_OLDEST=6;
+ // Review intervals count completed exams; cancelling an exam never advances the queue.
+ const FIRST_WRONG_GAP=2, REPEATED_WRONG_GAP=1, CORRECT_REVIEW_GAP=3;
  let PROGRESS_STORE=null, progress=null;
  const blankProgress=()=>({version:PROGRESS_VERSION,questions:{},exams:[],legacyIncomplete:false,legacyExamIds:[],updatedAt:null});
  const readProgress=()=>{
@@ -48,6 +51,40 @@
  const saveProgress=()=>{try{localStorage.setItem(PROGRESS_STORE,JSON.stringify(progress));return true}catch(e){console.warn('Cannot save progress',e);return false}};
  const mastered=id=>progress?.questions?.[id]?.status==='mastered';
  const unmastered=ids=>ids.filter(id=>!mastered(id));
+ const repairOldMistakeCounts=()=>{
+  for(const [id,q] of Object.entries(progress.questions)){
+   const old=Math.max(0,Number(history.wrongs[id]?.wrongCount)||0);
+   const present=Math.max(0,Number(q.wrongCount)||0);
+   // The previous build sometimes stored skipped legacy questions with status review, wrongCount=0.
+   const missingCount=(q.status==='review'||q.lastWrongAt)?1:0;
+   q.wrongCount=Math.max(old,present,missingCount);
+  }
+ };
+ const completedExams=()=>progress.exams.length;
+ const nextExamNumber=()=>completedExams()+1;
+ const wasSeen=id=>!!progress.questions[id]?.status;
+ const hasMistake=id=>(Number(progress.questions[id]?.wrongCount)||0)>0;
+ const isDue=id=>progress.questions[id]?.status==='review' && (Number(progress.questions[id]?.dueExam)||0)<=nextExamNumber();
+ const dueOrder=(ids,count)=>shuffled(ids).sort((a,b)=>
+  (Number(progress.questions[a]?.dueExam)||0)-(Number(progress.questions[b]?.dueExam)||0) ||
+  (Number(progress.questions[b]?.wrongCount)||0)-(Number(progress.questions[a]?.wrongCount)||0)).slice(0,count);
+ const ageOf=id=>{
+  const x=progress.questions[id]||{};
+  return Number(x.lastSeenExam)||0;
+ };
+ const recencyWeight=id=>{
+  const age=completedExams()-ageOf(id);
+  return age<=0?.2:age===1?.45:age===2?.7:1;
+ };
+ const weightedSample=(ids,count,historyBias)=>ids.map(id=>{
+  const errors=Number(progress.questions[id]?.wrongCount)||0;
+  const weight=Math.max(.05,recencyWeight(id)*(historyBias?1+Math.min(errors,8)*.65:1));
+  return {id,score:Math.pow(Math.random(),1/weight)};
+ }).sort((a,b)=>b.score-a.score).slice(0,count).map(x=>x.id);
+ const oldestFirst=(ids,count)=>shuffled(ids).sort((a,b)=>ageOf(a)-ageOf(b) ||
+  (Number(progress.questions[a]?.lastAttemptAt)||0)-(Number(progress.questions[b]?.lastAttemptAt)||0)).slice(0,count);
+ // The full mistake history is permanent: completion removes a question from the *active queue*, never from this list.
+ const requiredCorrectRepeats=wrongCount=>Math.min(4,Math.max(2,(Number(wrongCount)||0)+1));
  const overview=()=>{
   let masteredCount=0,reviewCount=0;
   for(const q of EXAM_QUESTIONS){
@@ -65,7 +102,9 @@
    if(bar)bar.style.flex=String(value)+' 1 0%';
   }
   const percent=$('overview-percent');if(percent)percent.textContent=(s.mastered*100/BANK_SIZE).toFixed(1).replace('.',',')+'%';
-  const note=$('overview-note');if(note)note.textContent=progress.legacyIncomplete
+   const covered=$('overview-covered');if(covered)covered.textContent='Охоплено '+(BANK_SIZE-s.unrecorded)+' із '+BANK_SIZE+' ('+((BANK_SIZE-s.unrecorded)*100/BANK_SIZE).toFixed(1).replace('.',',')+'%).';
+   const mode=$('overview-mode');if(mode)mode.textContent=s.unrecorded===0?'Режим закріплення: ціль 20 із історії помилок · 12 без помилок · 6 найдавніше перевірених (за наявності).':'Режим освоєння: нові питання + не більше 2 відкладених повторень.';
+   const note=$('overview-note');if(note)note.textContent=progress.legacyIncomplete
    ? 'Історія до оновлення збережена частково: деякі давні правильні відповіді невідомі. «Не зафіксовано» не обов’язково означає «не зустрічалося».'
    : 'Усі категорії — унікальні номери питань. «Не зафіксовано» означає, що питання ще не потрапляло до завершених іспитів цього профілю.';
  };
@@ -115,7 +154,7 @@
    localStorage.setItem(HISTORY_STORE,JSON.stringify(data.legacyWrongHistory));
    if(data.examState)localStorage.setItem(STORE,JSON.stringify(data.examState));
    else localStorage.removeItem(STORE);
-   progress=readProgress();history=readHistory();restore();
+   progress=readProgress();history=readHistory();repairOldMistakeCounts();saveProgress();restore();
    alert('Історію відновлено. Якщо збережений екзамен прострочений, його буде завершено за таймером.');
   }catch(e){alert('Не вдалося записати резервну копію в браузер: '+(e?.message||e));}
  }
@@ -133,7 +172,7 @@
  function setAccess(hash){
   unlocked=true;STORE='autoskola_hrua_exam_v2_'+hash.slice(0,16);
   HISTORY_STORE='autoskola_hrua_wrong_history_v2_'+hash.slice(0,16);
-  history=readHistory();PROGRESS_STORE='autoskola_hrua_progress_v3_'+hash.slice(0,16);progress=readProgress();saveProgress();try{sessionStorage.setItem(AUTH_SESSION,hash)}catch{}
+  history=readHistory();PROGRESS_STORE='autoskola_hrua_progress_v3_'+hash.slice(0,16);progress=readProgress();repairOldMistakeCounts();saveProgress();try{sessionStorage.setItem(AUTH_SESSION,hash)}catch{}
   $('gate-key').value='';$('gate-error').textContent='';restore();
  }
  async function unlock(raw){
@@ -172,7 +211,8 @@
  function updateHome(){
   const queued=pendingReview().length, stats=overview();
   $('history-active').textContent=String(queued);
-  $('history-summary').textContent=`Засвоєно: ${stats.mastered} із 748. На повторення: ${queued}. Не зафіксовано: ${stats.unrecorded}.`;
+  $('history-summary').textContent=`Охоплено: ${BANK_SIZE-stats.unrecorded} із ${BANK_SIZE}. Засвоєно: ${stats.mastered}. На повторення: ${queued}.`;
+  $('home-stage').textContent=stats.unrecorded===0?'Режим закріплення — ціль 20 / 12 / 6 питань (за наявності).':'Режим освоєння — нові питання та до 2 відкладених повторень за екзамен.';
   const active=state && !state.finishedAt && state.ids.length>=1;
   $('resume-btn').hidden=!active;
   $('show-last-btn').hidden=!(state && state.finishedAt);
@@ -206,29 +246,66 @@
 
  function startExam(){
   if(!unlocked)return;
-  const available=EXAM_QUESTIONS.map(q=>q.id).filter(id=>!mastered(id));
-  if(available.length===0){alert('Усі 748 питань уже засвоєно. Новий екзамен не потрібний.');return}
-  const remainingPriority=PRIORITY_IDS.filter(id=>!mastered(id));
-  // Default: 4 unmastered priority questions. When fewer than 4 remain,
-  // enforce a minimum of 2 priority questions, reusing mastered priority questions only as a necessary exception.
-  const targetPriority=remainingPriority.length>=4?4:2;
-  const duePriority=pickReview(remainingPriority.filter(id=>progress.questions[id]?.status==='review'),targetPriority);
-  let chosenPriority=[...duePriority];
-  chosenPriority.push(...shuffled(remainingPriority.filter(id=>!chosenPriority.includes(id))).slice(0,targetPriority-chosenPriority.length));
-  if(chosenPriority.length<targetPriority){
-   chosenPriority.push(...shuffled(PRIORITY_IDS.filter(id=>mastered(id)&&!chosenPriority.includes(id))).slice(0,targetPriority-chosenPriority.length));
+  const all=EXAM_QUESTIONS.map(q=>q.id),selected=[],chosen=new Set();
+  const take=(ids,count)=>{
+   for(const id of ids){if(selected.length>=TOTAL || count<=0)break;
+    if(!chosen.has(id)){selected.push(id);chosen.add(id);count--}
+   }
+  };
+  const inPriority=()=>selected.filter(id=>prioritySet.has(id)).length;
+  const due=pendingReview().filter(isDue);
+  let mode;
+  if(all.some(id=>!wasSeen(id))){
+   mode='coverage';
+   const unseen=all.filter(id=>!wasSeen(id));
+   const unseenPriority=unseen.filter(id=>prioritySet.has(id));
+   const quota=unseenPriority.length>=4?4:2;
+   const earlyPriority=dueOrder(due.filter(id=>prioritySet.has(id)),Math.min(MAX_REVIEW,quota));
+   take(earlyPriority,quota);
+   take(shuffled(unseenPriority),quota-inPriority());
+   // Explicit priority quota exception: old mastered questions may appear for road-safety practice.
+   if(inPriority()<quota){
+    take(oldestFirst(PRIORITY_IDS.filter(id=>!chosen.has(id)&&mastered(id)),quota-inPriority()),quota-inPriority());
+   }
+   const reviewSlots=MAX_REVIEW-earlyPriority.length;
+   take(dueOrder(due.filter(id=>!prioritySet.has(id)),reviewSlots),reviewSlots);
+   take(shuffled(unseen.filter(id=>!prioritySet.has(id))),TOTAL-selected.length);
+   // The final coverage exam can be shorter than 38 rather than silently repeating mastered questions.
+  }else{
+   mode='reinforcement';
+   const eligible=all.filter(id=>progress.questions[id]?.status!=='review'||isDue(id));
+   const dueEligible=dueOrder(due,TOTAL);
+   // Reserve at least two priority questions while respecting review cooldown whenever possible.
+   const mandatory=[];
+   const reserve=(pool,n)=>{for(const id of pool){if(mandatory.length>=n)break;if(!mandatory.includes(id))mandatory.push(id)}};
+   reserve(dueEligible.filter(id=>prioritySet.has(id)),2);
+   reserve(weightedSample(eligible.filter(id=>prioritySet.has(id)&&hasMistake(id)&&!mandatory.includes(id)),2,true),2);
+   reserve(oldestFirst(eligible.filter(id=>prioritySet.has(id)&&!mandatory.includes(id)),2),2);
+   if(mandatory.length<2)reserve(oldestFirst(PRIORITY_IDS.filter(id=>!mandatory.includes(id)),2),2);
+   const mandatoryWrong=mandatory.filter(hasMistake),mandatoryClean=mandatory.filter(id=>!hasMistake(id));
+   take(mandatoryWrong,REINFORCE_HISTORY);
+   const missingHistory=REINFORCE_HISTORY-selected.length;
+   take(dueEligible.filter(hasMistake),missingHistory);
+   take(weightedSample(eligible.filter(hasMistake).filter(id=>!chosen.has(id)),REINFORCE_HISTORY-selected.length,true),REINFORCE_HISTORY-selected.length);
+   // Reserve the originally required clean priority questions as part of the clean category.
+   const baseClean=selected.length;
+   take(mandatoryClean,REINFORCE_CLEAN);
+   take(weightedSample(eligible.filter(id=>!hasMistake(id)&&!chosen.has(id)),REINFORCE_CLEAN-(selected.length-baseClean),false),REINFORCE_CLEAN-(selected.length-baseClean));
+   const baseOldest=selected.length;
+   take(oldestFirst(eligible.filter(id=>!chosen.has(id)),REINFORCE_OLDEST),REINFORCE_OLDEST);
+   // If a group has too few questions, use remaining eligible ones to still form 38.
+   take(oldestFirst(eligible.filter(id=>!chosen.has(id)),TOTAL-selected.length),TOTAL-selected.length);
+   // Even extreme/imperfect imported histories must never yield an empty exam.
+   if(selected.length<TOTAL)take(oldestFirst(all.filter(id=>!chosen.has(id)),TOTAL-selected.length),TOTAL-selected.length);
   }
-  const availableOther=EXAM_QUESTIONS.map(q=>q.id).filter(id=>!prioritySet.has(id)&&!mastered(id));
-  const countOther=Math.min(TOTAL-chosenPriority.length,availableOther.length);
-  const dueOther=pickReview(availableOther.filter(id=>progress.questions[id]?.status==='review'),countOther);
-  const chosenOther=[...dueOther,...shuffled(availableOther.filter(id=>!dueOther.includes(id))).slice(0,countOther-dueOther.length)];
-  const ids=shuffled([...chosenPriority,...chosenOther]);
-  if(ids.length===0||ids.length>TOTAL||new Set(ids).size!==ids.length||ids.filter(id=>prioritySet.has(id)).length!==targetPriority){
+  const ids=shuffled(selected);
+  if(!ids.length||ids.length>TOTAL||new Set(ids).size!==ids.length||ids.filter(id=>prioritySet.has(id)).length<2){
    alert('Не вдалося сформувати екзамен із доступних питань.');return;
   }
-  const reviewIds=ids.filter(id=>progress.questions[id]?.status==='review');
+  const reviewIds=ids.filter(id=>hasMistake(id));
   const now=Date.now();
-  state={version:VERSION,examId:String(now)+'_'+Math.random().toString(36).slice(2,9),ids,reviewIds,answers:{},index:0,startedAt:now,endAt:now+DURATION,finishedAt:null,reason:null};
+  state={version:VERSION,examId:String(now)+'_'+Math.random().toString(36).slice(2,9),ids,reviewIds,mode,
+   answers:{},index:0,startedAt:now,endAt:now+DURATION,finishedAt:null,reason:null};
   zoomed=false;safeSet(state);showScreen('exam');renderExam();
  }
  function choose(v){
@@ -314,33 +391,50 @@
   if(!state?.finishedAt || !unlocked || !progress)return;
   const examId=String(state.examId||'legacy_'+state.startedAt);
   if(progress.exams.some(ex=>ex.examId===examId))return;
-  const alreadyProcessed=history.processed.includes(examId);
+  const oldProcessed=history.processed.includes(examId),ordinal=nextExamNumber();
   const entries=[];
   for(const id of state.ids){
    const correct=isCorrect(id),answered=isAnswered(id),old=progress.questions[id]||{};
-   const entry={id,answer:answerFor(id),correct,answered};entries.push(entry);
-   const everMastered=old.status==='mastered';
-   progress.questions[id]={...old,
-    status:correct||everMastered?'mastered':'review',
-    wrongCount:(Number(old.wrongCount)||0)+(!correct&&!alreadyProcessed?1:0),
-    rightCount:(Number(old.rightCount)||0)+(correct&&!alreadyProcessed?1:0),
-    lastAttemptAt:state.finishedAt,
+   entries.push({id,answer:answerFor(id),correct,answered});
+   const hadError=Number(old.wrongCount)||0;
+   // Already-processed old exam: import its entries without incrementing historical counts a second time.
+   if(oldProcessed && old.status){
+    progress.questions[id]={...old,lastAttemptAt:old.lastAttemptAt||state.finishedAt,
+     lastSeenExam:old.lastSeenExam||ordinal};
+    continue;
+   }
+   const errorCount=hadError+(!correct&&(!oldProcessed||!old.status)?1:0);
+   const wasInReview=old.status==='review';
+   const oldStreak=Number(old.correctStreak)||0;
+   let status='mastered',correctStreak=0,dueExam=null;
+   if(!correct){
+    status='review';
+    dueExam=ordinal+1+((hadError||old.status==='mastered')?REPEATED_WRONG_GAP:FIRST_WRONG_GAP);
+   }else if(wasInReview){
+    correctStreak=oldStreak+(oldProcessed?0:1);
+    if(correctStreak<requiredCorrectRepeats(errorCount)){
+     status='review';dueExam=ordinal+1+CORRECT_REVIEW_GAP;
+    }
+   }
+   progress.questions[id]={...old,status,wrongCount:errorCount,
+    rightCount:(Number(old.rightCount)||0)+(correct&&!oldProcessed?1:0),
+    correctStreak,dueExam,lastSeenExam:ordinal,lastAttemptAt:state.finishedAt,
     lastWrongAt:!correct?state.finishedAt:old.lastWrongAt||null,
     lastCorrectAt:correct?state.finishedAt:old.lastCorrectAt||null};
+   // This separate legacy record preserves every known mistake, even after mastery.
    const w=history.wrongs[id];
    if(correct){
-    if(w){w.needsReview=false;w.lastCorrectAt=state.finishedAt;
-     if(!alreadyProcessed)w.correctAfterWrong=(w.correctAfterWrong||0)+1}
-   }else if(!alreadyProcessed && !everMastered){
+    if(w){w.needsReview=status==='review';w.lastCorrectAt=state.finishedAt;
+     if(!oldProcessed)w.correctAfterWrong=(w.correctAfterWrong||0)+1}
+   }else if(!oldProcessed){
     history.wrongs[id]={...w,wrongCount:(w?.wrongCount||0)+1,lastWrongAt:state.finishedAt,
      lastWrongAnswer:answerFor(id),needsReview:true};
    }
   }
   progress.exams.push({examId,startedAt:state.startedAt,finishedAt:state.finishedAt,
-   reason:state.reason||'manual',entries});
+   reason:state.reason||'manual',mode:state.mode||'coverage',entries});
   progress.updatedAt=state.finishedAt;
-  if(!alreadyProcessed){history.processed.push(examId);if(history.processed.length>1000)history.processed=history.processed.slice(-1000)}
-  // Write progress first, followed by the backward-compatible original wrong-answer bank.
+  if(!oldProcessed){history.processed.push(examId);if(history.processed.length>1000)history.processed=history.processed.slice(-1000)}
   saveProgress();saveHistory();
  }
  function finishExam(reason){
@@ -359,7 +453,7 @@
   const p=state.ids.filter(id=>prioritySet.has(id)),failed=p.filter(id=>!isCorrect(id));
   $('priority-note').textContent='Питання про пріоритет руху: '+p.length+' у цьому варіанті, неправильних відповідей: '+failed.length+'.';
   const incorrect=state.ids.filter(id=>!isCorrect(id)).length;
-  $('history-result').textContent=`Із попередніх помилок включено: ${state.reviewIds.length}. Потребують повторення: ${pendingReview().length}. Неправильних або пропущених у цьому екзамені: ${incorrect}.`;
+  $('history-result').textContent=`З історії помилок включено: ${state.reviewIds.length}. Потребують закріплення: ${pendingReview().length}. Неправильних або пропущених у цьому екзамені: ${incorrect}.`;
   drawOverview();$('show-key').checked=false;fillResultTable();
  }
  function fillResultTable(){

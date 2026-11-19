@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css?v=3">
 <script defer src="data.js"></script>
-<script defer src="app.js?v=3"></script>
+<script defer src="app.js?v=4"></script>
 </head>
 <body>
 <header class="header"><div class="head-inner">
@@ -35,7 +35,8 @@
 <section id="home" class="screen" hidden>
   <div class="intro"><div class="eyebrow">ПІДГОТОВКА ДО ТЕОРЕТИЧНОГО ІСПИТУ</div><h1>Тренувальний екзамен</h1><p>Оригінальні хорватські питання — без змін. Відповідайте на них у форматі іспиту, а після завершення перегляньте свій результат.</p></div>
   <div class="facts"><div><strong>38</strong><span>випадкових питань</span></div><div><strong>45:00</strong><span>хвилин</span></div><div><strong>4 / 2</strong><span>питання про пріоритет*</span></div></div>
-  <div class="history-panel" aria-live="polite"><div><strong>Повторення помилок</strong><p id="history-summary">Історія ще не створена.</p></div><span id="history-active" class="history-count">0</span></div>
+   <div class="history-panel" aria-live="polite"><div><strong>Повторення помилок</strong><p id="history-summary">Історія ще не створена.</p></div><span id="history-active" class="history-count">0</span></div>
+   <p id="home-stage" class="result-note" aria-live="polite">Режим освоєння.</p>
 
   <div class="backup-controls" aria-label="Резервна копія прогресу">
    <button type="button" class="btn secondary backup-export" id="backup-export-home">Завантажити всю історію (JSON)</button>
@@ -67,7 +68,9 @@
   <div class="all-progress-stats"><div><b class="mastered-dot"></b> Правильно <strong id="overview-mastered">0</strong></div>
    <div><b class="review-dot"></b> Повторити <strong id="overview-review">0</strong></div>
    <div><b class="unrecorded-dot"></b> Не зафіксовано <strong id="overview-unrecorded">748</strong></div></div>
-  <p id="overview-note" class="result-note"></p>
+   <p id="overview-covered" class="result-note">Охоплено 0 із 748.</p>
+   <p id="overview-mode" class="result-note">Режим освоєння.</p>
+   <p id="overview-note" class="result-note"></p>
  </section>
 
 
